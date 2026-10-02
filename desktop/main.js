@@ -4,7 +4,7 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog, session, nativeTheme } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
-const { spawn } = require("node:child_process");
+const { spawn, execFile } = require("node:child_process");
 
 const APP_URL = process.env.NEXTALERTS_URL || "https://work.nextalerts.in";
 const APP_ORIGIN = new URL(APP_URL).origin;
@@ -140,6 +140,9 @@ async function checkUpdate() {
     return { current, available: false, error: String(err.message || err) };
   }
 }
+const run = (cmd, args) => new Promise((resolve, reject) => {
+  execFile(cmd, args, { timeout: 300000 }, (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).split("\n")[0])) : resolve(stdout)));
+});
 let installing = null;
 async function installUpdate() {
   if (installing) return installing;
@@ -162,8 +165,42 @@ async function installUpdate() {
       setTimeout(() => app.quit(), 1200);
       return { ok: true, message: `Installing ${version}… the app will close and open again.` };
     }
-    await shell.openPath(file);
-    return { ok: true, message: `Opened ${name} — drag NextAlerts into Applications (replace the old one), then open it again.` };
+    // Mac: swap the app in place — no dragging. The new app is copied out of the dmg, then a small script waits
+    // for this app to close, replaces the bundle where it is installed, and opens it again.
+    try {
+      const bundle = path.resolve(process.execPath, "..", "..", ".."); // …/NextAlerts.app
+      if (!bundle.endsWith(".app") || bundle.includes("/AppTranslocation/") || bundle.startsWith("/Volumes/")) throw new Error("the app is not installed in a normal folder");
+      fs.accessSync(path.dirname(bundle), fs.constants.W_OK);
+      const mnt = path.join(dir, "mnt");
+      fs.mkdirSync(mnt, { recursive: true });
+      await run("/usr/bin/hdiutil", ["attach", file, "-nobrowse", "-readonly", "-mountpoint", mnt]);
+      const fresh = path.join(dir, "NextAlerts.app");
+      try {
+        await run("/usr/bin/ditto", [path.join(mnt, "NextAlerts.app"), fresh]);
+      } finally {
+        await run("/usr/bin/hdiutil", ["detach", mnt, "-force"]).catch(() => {});
+      }
+      await run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", fresh]).catch(() => {});
+      await run("/usr/bin/codesign", ["--verify", "--deep", fresh]);
+      const sh = path.join(dir, "swap.sh");
+      const q = (x) => "'" + x.replace(/'/g, "'\\''") + "'";
+      fs.writeFileSync(sh, [
+        "#!/bin/sh",
+        `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done`,
+        `rm -rf ${q(bundle + ".old")}`,
+        `mv ${q(bundle)} ${q(bundle + ".old")} || exit 1`,
+        `if /usr/bin/ditto ${q(fresh)} ${q(bundle)}; then rm -rf ${q(bundle + ".old")}; else rm -rf ${q(bundle)}; mv ${q(bundle + ".old")} ${q(bundle)}; fi`,
+        `/usr/bin/open ${q(bundle)}`,
+        "",
+      ].join("\n"), { mode: 0o755 });
+      spawn("/bin/sh", [sh], { detached: true, stdio: "ignore" }).unref();
+      setTimeout(() => app.quit(), 1200);
+      return { ok: true, message: `Installing ${version}… the app will close and open again.` };
+    } catch (err) {
+      // could not swap by itself (no write access, odd location): fall back to the dmg
+      await shell.openPath(file);
+      return { ok: true, message: `Opened ${name} — drag NextAlerts into Applications (replace the old one), then open it again. (${String(err.message || err).slice(0, 80)})` };
+    }
   })().finally(() => { installing = null; });
   return installing;
 }
