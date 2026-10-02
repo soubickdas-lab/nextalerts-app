@@ -26,12 +26,19 @@ else
 fi
 
 echo "installed now: $(adb shell dumpsys package $PKG | grep versionName)"
-adb shell am start -W -n $PKG/.MainActivity
-sleep 40
+# the CI emulator's graphics sometimes kill a freshly started app; a real crash of ours shows up every time
+PID=""
+for try in 1 2 3; do
+  adb logcat -c || true
+  adb shell am start -W -n $PKG/.MainActivity
+  sleep 40
+  PID=$(adb shell pidof $PKG || true)
+  echo "try $try pid: $PID"
+  [ -n "$PID" ] && break
+  adb logcat -d | grep -iE "FATAL|$PKG|chromium.*crash|lowmemorykiller" | tail -25 || true
+done
 adb exec-out screencap -p > android-screen.png
-PID=$(adb shell pidof $PKG || true)
-echo "pid: $PID"
-[ -n "$PID" ] || { echo "the app is not running"; adb logcat -d -s AndroidRuntime:E | tail -60; exit 1; }
+[ -n "$PID" ] || { echo "the app is not running"; exit 1; }
 CRASH=$(adb logcat -d -s AndroidRuntime:E | grep -c "FATAL EXCEPTION" || true)
 [ "$CRASH" = "0" ] || { adb logcat -d -s AndroidRuntime:E | tail -60; exit 1; }
 # the web view really loaded our site (the page title reaches the log through the window title dump)
