@@ -1,7 +1,7 @@
 {
   "name": "nextalerts",
   "productName": "NextAlerts",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "NextAlerts dashboard as a desktop app. It opens work.nextalerts.in, so every website change shows up here by itself.",
   "author": "NextAlerts Private Limited",
   "private": true,

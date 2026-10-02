@@ -165,6 +165,23 @@ jobs:
         with:
           name: ios-screenshot
           path: ios/ios-screen.png
+      - name: Build the unsigned .ipa (for sideloading - AltStore / Sideloadly sign it with your own Apple ID)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v=$(node -p "require('../desktop/package.json').version"); fi
+          xcodebuild -project NextAlerts.xcodeproj -scheme NextAlerts -sdk iphoneos -configuration Release             -destination 'generic/platform=iOS' -derivedDataPath build-device             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | tail -15
+          rm -rf Payload && mkdir Payload
+          cp -R build-device/Build/Products/Release-iphoneos/NextAlerts.app Payload/
+          zip -qry "NextAlerts-$v.ipa" Payload
+          ls -la "NextAlerts-$v.ipa"
+          unzip -l "NextAlerts-$v.ipa" | grep -E "Info.plist|NextAlerts.app/NextAlerts$"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" -c "Print :MinimumOSVersion" Payload/NextAlerts.app/Info.plist
+          lipo -info Payload/NextAlerts.app/NextAlerts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: ios/NextAlerts-*.ipa
 
   # A real iPhone app for TestFlight. It only runs once the four Apple secrets are saved in the repository
   # (see README, "iPhone app"); until then this job says so and is skipped.
@@ -210,7 +227,7 @@ jobs:
           xcodebuild -exportArchive -archivePath build/NextAlerts.xcarchive -exportOptionsPlist export.plist -exportPath build/export "${AUTH[@]}" | tail -30
 
   release:
-    needs: [desktop, android, android-test]
+    needs: [desktop, android, android-test, ios]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -225,13 +242,14 @@ jobs:
             out/NextAlerts-Setup-*.exe
             out/NextAlerts-*.dmg
             out/NextAlerts-*.apk
+            out/NextAlerts-*.ipa
           body: |
             **NextAlerts apps** - each one opens the live dashboard, so website changes need no update.
 
             - **Windows:** `NextAlerts-Setup-*.exe` - if Windows shows "protected your PC": More info, then Run anyway.
             - **Mac:** `...-arm64.dmg` for Apple Silicon (M1-M4), `...-x64.dmg` for Intel. First launch: right-click the app, then Open.
             - **Android:** `NextAlerts-*.apk` - allow "install from this source" when asked.
-            - **iPhone / iPad:** open work.nextalerts.in in Safari, Share, Add to Home Screen.
+            - **iPhone / iPad:** `NextAlerts-*.ipa` is unsigned - sideload it with AltStore or Sideloadly (they sign it with your Apple ID). Or open work.nextalerts.in in Safari, Share, Add to Home Screen.
 
             Already installed? The app shows an **Update app** button by itself.
 
