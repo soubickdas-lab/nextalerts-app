@@ -1,0 +1,198 @@
+name: Build apps
+
+# Push a tag like v1.0.3 and every app is built, tested and attached to a GitHub release.
+# The installed apps look at the latest release and offer the update by themselves.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            files: desktop/dist/*.exe
+          - os: macos-latest
+            script: dist:mac
+            files: desktop/dist/*.dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - run: npm ci
+      - run: npm run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Smoke test (Windows) - the built app opens the live dashboard
+        if: runner.os == 'Windows'
+        run: |
+          out=$("dist/win-unpacked/NextAlerts.exe" --smoke-test 2>&1 | grep -a SMOKE || true)
+          echo "$out"; echo "$out" | grep -q '"app":true'
+      - name: Smoke test (Mac, from the dmg)
+        if: runner.os == 'macOS'
+        run: |
+          for dmg in dist/*.dmg; do
+            mnt=$(mktemp -d)
+            hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
+            codesign --verify --deep --strict --verbose=2 "$mnt/NextAlerts.app"
+            hdiutil detach "$mnt"
+          done
+          mnt=$(mktemp -d)
+          hdiutil attach dist/*-arm64.dmg -nobrowse -readonly -mountpoint "$mnt"
+          cp -R "$mnt/NextAlerts.app" /Applications/
+          hdiutil detach "$mnt"
+          out=$("/Applications/NextAlerts.app/Contents/MacOS/NextAlerts" --smoke-test 2>&1 | grep -a SMOKE || true)
+          echo "$out"; echo "$out" | grep -q '"app":true'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: ${{ matrix.files }}
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Version + signing key
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v=$(node -p "require('./desktop/package.json').version"); fi
+          echo "APP_VERSION=$v" >> "$GITHUB_ENV"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/nextalerts.p12"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/nextalerts.p12" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret - this build is signed with a throwaway debug key and cannot update an installed app."
+          fi
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      - name: Build the APK
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: nextalerts
+      - name: Check the signature
+        run: |
+          apk="NextAlerts-$APP_VERSION.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$tools/apksigner" verify --print-certs "$apk" | head -4
+          "$tools/aapt2" dump badging "$apk" | head -3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: NextAlerts-*.apk
+
+  android-test:
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+      - name: Let the emulator use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and open the app on an Android phone (emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r NextAlerts-*.apk
+            adb shell am start -W -n in.nextalerts.work/.MainActivity
+            sleep 40
+            adb exec-out screencap -p > android-screen.png
+            adb shell pidof in.nextalerts.work
+            adb logcat -d -s AndroidRuntime:E | tail -40
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-screenshot
+          path: android-screen.png
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then sed -i '' "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"${GITHUB_REF_NAME#v}\"/" project.yml; fi
+          xcodegen generate
+      - name: Build for the simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project NextAlerts.xcodeproj -scheme NextAlerts -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+      - name: Open the app on an iPhone (simulator) and take a picture
+        working-directory: ios
+        run: |
+          dev=$(xcrun simctl list devices available | grep -E 'iPhone 1[5-9]' | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "simulator: $dev"
+          xcrun simctl boot "$dev"
+          xcrun simctl bootstatus "$dev" -b
+          xcrun simctl install "$dev" build/Build/Products/Debug-iphonesimulator/NextAlerts.app
+          xcrun simctl launch "$dev" in.nextalerts.work
+          sleep 45
+          xcrun simctl io "$dev" screenshot ios-screen.png
+          xcrun simctl spawn "$dev" launchctl list | grep -i nextalerts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-screenshot
+          path: ios/ios-screen.png
+
+  release:
+    needs: [desktop, android]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/NextAlerts-Setup-*.exe
+            out/NextAlerts-*.dmg
+            out/NextAlerts-*.apk
+          body: |
+            **NextAlerts apps** - each one opens the live dashboard, so website changes need no update.
+
+            - **Windows:** `NextAlerts-Setup-*.exe` - if Windows shows "protected your PC": More info, then Run anyway.
+            - **Mac:** `...-arm64.dmg` for Apple Silicon (M1-M4), `...-x64.dmg` for Intel. First launch: right-click the app, then Open.
+            - **Android:** `NextAlerts-*.apk` - allow "install from this source" when asked.
+            - **iPhone / iPad:** open work.nextalerts.in in Safari, Share, Add to Home Screen.
+
+            Already installed? The app shows an **Update app** button by itself.

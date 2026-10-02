@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The version comes from the git tag in CI (v1.2.3 -> 1.2.3); a local build is 0.0.0.
+def appVersion = (System.getenv("APP_VERSION") ?: "0.0.0")
+def parts = appVersion.tokenize('.').collect { it.isInteger() ? it.toInteger() : 0 }
+while (parts.size() < 3) parts << 0
+
+android {
+    namespace 'in.nextalerts.work'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'in.nextalerts.work'
+        minSdk 24
+        targetSdk 34
+        versionCode parts[0] * 10000 + parts[1] * 100 + parts[2]
+        versionName appVersion
+    }
+
+    signingConfigs {
+        release {
+            // CI writes the keystore from a repository secret; without it the build falls back to the debug key
+            def ks = System.getenv("ANDROID_KEYSTORE_FILE")
+            if (ks) {
+                storeFile file(ks)
+                storeType 'pkcs12'
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: 'nextalerts'
+                keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv("ANDROID_KEYSTORE_FILE") ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildFeatures { buildConfig true }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}
