@@ -31,18 +31,28 @@ installers to a release. Installed apps check the latest release and show an **U
 - Update from the GitHub release: Windows installs silently and reopens; Mac opens the new dmg;
   Android downloads the apk and starts the installer.
 
-## iPhone
+## iPhone app
 
-Without an Apple Developer signature: open work.nextalerts.in in Safari → Share → Add to Home Screen.
+The iPhone app is in `ios/` and is built and opened in a simulator on every release. To put it on real
+phones Apple needs it signed with a paid Apple Developer account. Do this once:
 
-With an Apple Developer account, on a Mac:
+1. **App Store Connect → Apps → + → New App**: platform iOS, name `NextAlerts`, bundle ID `in.nextalerts.work`
+   (register the bundle ID first under developer.apple.com → Identifiers if it is not in the list).
+2. **App Store Connect → Users and Access → Integrations → App Store Connect API → +**: name `GitHub`,
+   access **Admin**. Download the `.p8` file (it can be downloaded only once) and note the **Key ID** and
+   the **Issuer ID** shown on that page.
+3. **developer.apple.com → Membership**: note the **Team ID**.
+4. In this repo: **Settings → Secrets and variables → Actions → New repository secret**, four of them:
+   `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the whole text of the .p8 file).
 
-```bash
-cd ios && brew install xcodegen && xcodegen generate && open NextAlerts.xcodeproj
-```
+From the next `node release.js x.y.z` the build signs the app and uploads it to **TestFlight**. Add the team
+as testers in App Store Connect → TestFlight; they install it with the TestFlight app and get updates there.
 
-In Xcode: pick your Team under Signing & Capabilities, then Product → Archive → Distribute App
-(TestFlight or App Store). The bundle id is `in.nextalerts.work`.
+Without the Apple keys an iPhone can still use it as a Home Screen app: open work.nextalerts.in in Safari →
+Share → Add to Home Screen.
+
+To build by hand on a Mac instead: `cd ios && brew install xcodegen && xcodegen generate && open NextAlerts.xcodeproj`,
+pick your Team under Signing & Capabilities, then Product → Archive → Distribute App.
 
 ## Android signing key
 
