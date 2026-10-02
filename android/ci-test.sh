@@ -8,8 +8,10 @@ PKG=in.nextalerts.work
 NEW=$(ls NextAlerts-*.apk | head -1)
 echo "new build: $NEW"
 
-OLD_URL=$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
-  | grep -o '"browser_download_url": *"[^"]*\.apk"' | head -1 | sed -E 's/.*"(https[^"]+)"/\1/' || true)
+# the release that is live right now = the one this build will replace
+OLD_TAG=$(curl -fsSI "https://github.com/${GITHUB_REPOSITORY}/releases/latest" | tr -d '\r' | sed -n 's#^[Ll]ocation: .*/releases/tag/##p' || true)
+OLD_URL=""
+if [ -n "${OLD_TAG:-}" ] && [ "NextAlerts-${OLD_TAG#v}.apk" != "$NEW" ]; then OLD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${OLD_TAG}/NextAlerts-${OLD_TAG#v}.apk"; fi
 if [ -n "${OLD_URL:-}" ]; then
   echo "previous release: $OLD_URL"
   curl -fsSL -o old.apk "$OLD_URL"

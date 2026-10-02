@@ -34,13 +34,10 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -343,26 +340,20 @@ public class MainActivity extends Activity {
     void checkUpdate() {
         String current = BuildConfig.VERSION_NAME;
         try {
-            HttpURLConnection c = (HttpURLConnection) new URL("https://api.github.com/repos/" + REPO + "/releases/latest").openConnection();
-            c.setRequestProperty("Accept", "application/vnd.github+json");
+            // the newest version is read from where GitHub redirects "releases/latest" — no API call, no hourly limit
+            HttpURLConnection c = (HttpURLConnection) new URL("https://github.com/" + REPO + "/releases/latest").openConnection();
+            c.setInstanceFollowRedirects(false);
             c.setRequestProperty("User-Agent", "nextalerts-app");
             c.setConnectTimeout(15000);
             c.setReadTimeout(15000);
-            if (c.getResponseCode() != 200) throw new Exception("GitHub said " + c.getResponseCode());
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            try (InputStream in = c.getInputStream()) {
-                byte[] b = new byte[8192];
-                int n;
-                while ((n = in.read(b)) > 0) buf.write(b, 0, n);
-            }
-            JSONObject rel = new JSONObject(buf.toString("UTF-8"));
-            String version = rel.optString("tag_name", "").replaceFirst("^v", "");
-            JSONArray assets = rel.optJSONArray("assets");
-            String url = null, name = null;
-            for (int i = 0; assets != null && i < assets.length(); i++) {
-                JSONObject a = assets.getJSONObject(i);
-                if (a.optString("name").endsWith(".apk")) { url = a.optString("browser_download_url"); name = a.optString("name"); }
-            }
+            int code = c.getResponseCode();
+            String loc = c.getHeaderField("Location");
+            c.disconnect();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("/releases/tag/v?(\\d+(?:\\.\\d+)*)$").matcher(loc == null ? "" : loc);
+            if (!m.find()) throw new Exception("GitHub said " + code);
+            String version = m.group(1);
+            String name = "NextAlerts-" + version + ".apk";
+            String url = "https://github.com/" + REPO + "/releases/download/v" + version + "/" + name;
             boolean available = url != null && newer(version, current);
             apkUrl = available ? url : null;
             apkName = name;

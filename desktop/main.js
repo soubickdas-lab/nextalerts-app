@@ -119,25 +119,23 @@ function isNewer(remote, local) {
   }
   return false;
 }
-async function latestRelease() {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { accept: "application/vnd.github+json", "user-agent": "nextalerts-app" },
-    signal: AbortSignal.timeout(20000),
+// The newest version is read from the address GitHub redirects "releases/latest" to — no API call, so no
+// hourly limit when a whole office sits behind one internet connection.
+async function latestVersion() {
+  const res = await fetch(`https://github.com/${REPO}/releases/latest`, {
+    redirect: "manual", headers: { "user-agent": "nextalerts-app" }, signal: AbortSignal.timeout(20000),
   });
-  if (!res.ok) throw new Error(`GitHub said ${res.status}`);
-  return res.json();
+  const m = (res.headers.get("location") || "").match(/\/releases\/tag\/v?(\d+(?:\.\d+)*)$/);
+  if (!m) throw new Error(`GitHub said ${res.status}`);
+  return m[1];
 }
-function assetFor(release) {
-  const want = process.platform === "win32" ? /^NextAlerts-Setup-.*\.exe$/
-    : new RegExp(`^NextAlerts-.*-${process.arch === "arm64" ? "arm64" : "x64"}\\.dmg$`);
-  return (release.assets || []).find((a) => want.test(a.name));
-}
+const assetName = (v) => (process.platform === "win32" ? `NextAlerts-Setup-${v}.exe` : `NextAlerts-${v}-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`);
+const assetUrl = (v) => `https://github.com/${REPO}/releases/download/v${v}/${assetName(v)}`;
 async function checkUpdate() {
   const current = app.getVersion();
   try {
-    const release = await latestRelease();
-    const version = String(release.tag_name || "").replace(/^v/, "");
-    return { current, version, available: isNewer(version, current) && !!assetFor(release), url: release.html_url };
+    const version = await latestVersion();
+    return { current, version, available: isNewer(version, current), url: `https://github.com/${REPO}/releases/tag/v${version}` };
   } catch (err) {
     return { current, available: false, error: String(err.message || err) };
   }
@@ -146,18 +144,18 @@ let installing = null;
 async function installUpdate() {
   if (installing) return installing;
   installing = (async () => {
-    const release = await latestRelease();
-    const version = String(release.tag_name || "").replace(/^v/, "");
+    const version = await latestVersion();
     if (!isNewer(version, app.getVersion())) return { ok: true, message: `Already on the latest version (${app.getVersion()}).` };
-    const asset = assetFor(release);
-    if (!asset) throw new Error(`Release ${version} has no download for this computer`);
+    const name = assetName(version);
     const dir = path.join(app.getPath("temp"), `nextalerts-update-${version}`);
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, asset.name);
-    const res = await fetch(asset.browser_download_url, { headers: { "user-agent": "nextalerts-app" } });
+    const file = path.join(dir, name);
+    const res = await fetch(assetUrl(version), { headers: { "user-agent": "nextalerts-app" } });
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length < 1e6) throw new Error("The download was incomplete");
+    fs.writeFileSync(file, bytes);
     if (process.platform === "win32") {
       // the installer replaces this app, so it has to outlive it; it reopens the app when it is done
       spawn(file, ["/S", "--force-run"], { detached: true, stdio: "ignore" }).unref();
@@ -165,7 +163,7 @@ async function installUpdate() {
       return { ok: true, message: `Installing ${version}… the app will close and open again.` };
     }
     await shell.openPath(file);
-    return { ok: true, message: `Opened ${asset.name} — drag NextAlerts into Applications (replace the old one), then open it again.` };
+    return { ok: true, message: `Opened ${name} — drag NextAlerts into Applications (replace the old one), then open it again.` };
   })().finally(() => { installing = null; });
   return installing;
 }
@@ -186,6 +184,8 @@ ipcMain.handle("app:install-update", async () => { try { return await installUpd
 ipcMain.handle("app:retry", () => { win?.loadURL(APP_URL); });
 
 // ------------------------------------------------------------ start
+// tests run the app beside an installed one: a separate profile folder keeps the two apart
+if (process.env.NEXTALERTS_PROFILE) app.setPath("userData", process.env.NEXTALERTS_PROFILE);
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

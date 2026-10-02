@@ -191,3 +191,18 @@ jobs:
             - **iPhone / iPad:** open work.nextalerts.in in Safari, Share, Add to Home Screen.
 
             Already installed? The app shows an **Update app** button by itself.
+
+  update-test:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the previous version, press Update, check the new one is installed and running
+        shell: bash
+        run: bash desktop/ci-update-test.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
