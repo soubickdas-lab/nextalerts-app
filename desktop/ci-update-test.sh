@@ -12,7 +12,7 @@ mkdir -p old
 if [ "$RUNNER_OS" = "Windows" ]; then
   gh release download "$PREV" --repo "$GITHUB_REPOSITORY" --pattern "NextAlerts-Setup-*.exe" --dir old
   # started through PowerShell: launching the installer straight from Git Bash crashed once on the CI machine
-  powershell -NoProfile -Command "Start-Process -FilePath (Get-ChildItem old/NextAlerts-Setup-*.exe)[0].FullName -ArgumentList '/S' -Wait"
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*" powershell -NoProfile -Command "Start-Process -FilePath (Get-ChildItem old/NextAlerts-Setup-*.exe)[0].FullName -ArgumentList '/S' -Wait"
   APP="$LOCALAPPDATA/Programs/nextalerts/NextAlerts.exe"
   for i in $(seq 1 30); do [ -f "$APP" ] && break; sleep 2; done
   ver() { powershell -NoProfile -Command "(Get-Item '$(cygpath -w "$APP")').VersionInfo.ProductVersion" | tr -d '\r' | sed 's/\.0$//'; }
