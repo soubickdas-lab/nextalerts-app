@@ -1,7 +1,7 @@
 // NextAlerts desktop app: one window that opens the live dashboard. Every change made on the website is in the
 // app the moment it is deployed; only the shell itself (this file) needs a new installer, and the app fetches
 // that from the GitHub release by itself when the Update button is pressed.
-const { app, BrowserWindow, Menu, shell, ipcMain, dialog, session, nativeTheme } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, dialog, session, nativeTheme } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn, execFile } = require("node:child_process");
@@ -11,7 +11,8 @@ const APP_ORIGIN = new URL(APP_URL).origin;
 const REPO = "soubickdas-lab/nextalerts-app";
 const SMOKE = process.argv.includes("--smoke-test"); // CI: load the site, print what happened, quit
 
-let win = null;
+let win = null, tray = null, quitting = false, toldTray = false;
+const showWindow = () => { if (!win) return createWindow(); if (win.isMinimized()) win.restore(); win.show(); win.focus(); };
 
 // ------------------------------------------------------------ window state
 const stateFile = () => path.join(app.getPath("userData"), "window.json");
@@ -47,11 +48,20 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: true,
+      backgroundThrottling: false, // keep listening for notifications while the window is hidden
     },
   });
   if (st.max) win.maximize();
   win.once("ready-to-show", () => { if (!SMOKE) win.show(); });
-  win.on("close", saveState);
+  // closing the window only hides it: the app stays in the tray (Windows) / Dock (Mac) so notifications keep
+  // coming. "Quit" in the tray or menu really closes it.
+  win.on("close", (e) => {
+    saveState();
+    if (quitting || SMOKE) return;
+    e.preventDefault();
+    win.hide();
+    if (process.platform === "win32" && !toldTray) { toldTray = true; tray?.displayBalloon?.({ title: "NextAlerts is still running", content: "It stays here so notifications reach you. Right-click the icon to quit." }); }
+  });
   win.on("closed", () => { win = null; });
 
   const wc = win.webContents;
@@ -162,7 +172,7 @@ async function installUpdate() {
     if (process.platform === "win32") {
       // the installer replaces this app, so it has to outlive it; it reopens the app when it is done
       spawn(file, ["/S", "--force-run"], { detached: true, stdio: "ignore" }).unref();
-      setTimeout(() => app.quit(), 1200);
+      setTimeout(() => { quitting = true; app.quit(); }, 1200);
       return { ok: true, message: `Installing ${version}… the app will close and open again.` };
     }
     // Mac: swap the app in place — no dragging. The new app is copied out of the dmg, then a small script waits
@@ -194,7 +204,7 @@ async function installUpdate() {
         "",
       ].join("\n"), { mode: 0o755 });
       spawn("/bin/sh", [sh], { detached: true, stdio: "ignore" }).unref();
-      setTimeout(() => app.quit(), 1200);
+      setTimeout(() => { quitting = true; app.quit(); }, 1200);
       return { ok: true, message: `Installing ${version}… the app will close and open again.` };
     } catch (err) {
       // could not swap by itself (no write access, odd location): fall back to the dmg
@@ -219,6 +229,7 @@ ipcMain.handle("app:version", () => app.getVersion());
 ipcMain.handle("app:check-update", () => checkUpdate());
 ipcMain.handle("app:install-update", async () => { try { return await installUpdate(); } catch (err) { return { ok: false, message: String(err.message || err) }; } });
 ipcMain.handle("app:retry", () => { win?.loadURL(APP_URL); });
+ipcMain.handle("app:focus", () => { showWindow(); });
 
 // ------------------------------------------------------------ start
 // tests run the app beside an installed one: a separate profile folder keeps the two apart
@@ -226,7 +237,8 @@ if (process.env.NEXTALERTS_PROFILE) app.setPath("userData", process.env.NEXTALER
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
+  app.on("second-instance", () => showWindow());
+  app.on("before-quit", () => { quitting = true; });
   app.whenReady().then(() => {
     if (process.platform === "win32") app.setAppUserModelId("in.nextalerts.work");
     // the dashboard may show notifications, read the clipboard for paste, and record the mic; nothing else is asked for
@@ -234,8 +246,19 @@ if (!app.requestSingleInstanceLock()) {
       cb(isOurs(details.requestingUrl || wc.getURL()) && ["notifications", "clipboard-read", "clipboard-sanitized-write", "media", "fullscreen"].includes(permission));
     });
     buildMenu();
+    if (process.platform === "win32" && !SMOKE) {
+      tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 16, height: 16 }));
+      tray.setToolTip("NextAlerts");
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: "Open NextAlerts", click: showWindow },
+        { label: "Check for updates…", click: () => { showWindow(); checkAndTell(); } },
+        { type: "separator" },
+        { label: "Quit", click: () => { quitting = true; app.quit(); } },
+      ]));
+      tray.on("click", showWindow);
+    }
     createWindow();
-    app.on("activate", () => { if (!win) createWindow(); });
+    app.on("activate", () => showWindow());
   });
-  app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+  app.on("window-all-closed", () => { if (process.platform !== "darwin" && quitting) app.quit(); });
 }

@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld("nextalertsApp", {
   checkUpdate: () => ipcRenderer.invoke("app:check-update"),
   installUpdate: () => ipcRenderer.invoke("app:install-update"),
   retry: () => ipcRenderer.invoke("app:retry"),
+  focus: () => ipcRenderer.invoke("app:focus"),
 });

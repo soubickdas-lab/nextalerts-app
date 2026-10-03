@@ -3,6 +3,10 @@ package in.nextalerts.work;
 import android.Manifest;
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -51,7 +55,9 @@ public class MainActivity extends Activity {
     static final String HOME = "https://work.nextalerts.in";
     static final String HOST = "work.nextalerts.in";
     static final String REPO = "soubickdas-lab/nextalerts-app";
-    static final int REQ_FILE = 11, REQ_MIC = 12;
+    static final int REQ_FILE = 11, REQ_MIC = 12, REQ_NOTIFY = 13;
+    static final String CHANNEL = "updates";
+    int notifyId = 100;
 
     WebView web;
     ValueCallback<Uri[]> fileCallback;
@@ -316,11 +322,39 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String version() { return BuildConfig.VERSION_NAME; }
         @JavascriptInterface public String updateInfo() { return updateJson; }
         @JavascriptInterface public void installUpdate() { runOnUiThread(MainActivity.this::startUpdate); }
+        // the page raises a notification; the phone shows it like any other app's
+        @JavascriptInterface public void notify(String title, String body, String link) { showNotification(title, body, link); }
+        @JavascriptInterface public void askNotify() { runOnUiThread(MainActivity.this::askNotifyPermission); }
         @JavascriptInterface public void retry() { runOnUiThread(() -> web.loadUrl(HOME)); }
         @JavascriptInterface public void fail(String why) { toast("Download failed: " + why); }
         @JavascriptInterface public void saveBase64(String name, String mime, String b64) {
             try { saveBytes(name, mime, Base64.decode(b64, Base64.DEFAULT)); } catch (Exception e) { toast("Could not save the file: " + e.getMessage()); }
         }
+    }
+
+    // ------------------------------------------------------------ notifications
+    void askNotifyPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
+    }
+
+    void showNotification(String title, String body, String link) {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null)
+                nm.createNotificationChannel(new NotificationChannel(CHANNEL, "NextAlerts", NotificationManager.IMPORTANCE_HIGH));
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+            // a tap opens the app on the page the notification is about
+            Intent open = new Intent(this, MainActivity.class);
+            if (link != null && link.startsWith("#")) { open.setAction(Intent.ACTION_VIEW); open.setData(Uri.parse(HOME + "/" + link)); }
+            open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            PendingIntent pi = PendingIntent.getActivity(this, notifyId, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
+            b.setSmallIcon(R.drawable.ic_notify).setColor(0xFF6552F5).setContentTitle(title).setContentText(body)
+                    .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi);
+            if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
+            nm.notify(notifyId++, b.build());
+        } catch (Exception ignored) {}
     }
 
     // ------------------------------------------------------------ the app's own update

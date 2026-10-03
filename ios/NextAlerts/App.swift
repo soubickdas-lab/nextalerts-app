@@ -3,12 +3,13 @@
 // file downloads (shared through the iOS share sheet) and links to other sites opening in Safari.
 import UIKit
 import WebKit
+import UserNotifications
 
 let home = URL(string: "https://work.nextalerts.in")!
 let host = "work.nextalerts.in"
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -16,7 +17,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         w.rootViewController = WebViewController()
         w.makeKeyAndVisible()
         window = w
+        UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         return true
+    }
+
+    // show the banner even while the app is on screen
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
+    }
+
+    // a tap opens the page the notification is about
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let link = response.notification.request.content.userInfo["link"] as? String, link.hasPrefix("#"),
+           let web = (window?.rootViewController as? WebViewController)?.web {
+            web.evaluateJavaScript("location.hash = \(String(reflecting: link))", completionHandler: nil)
+        }
+        completionHandler()
     }
 }
 
@@ -38,6 +55,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         """
         cfg.userContentController.addUserScript(WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController.add(self, name: "app")
+        cfg.userContentController.add(self, name: "notify")
         cfg.applicationNameForUserAgent = "NextAlertsApp/\(version) (iOS)"
 
         web = WKWebView(frame: .zero, configuration: cfg)
@@ -71,6 +89,16 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "notify", let d = message.body as? [String: Any] {
+            // the page raises a notification; iOS shows it as a normal banner
+            let c = UNMutableNotificationContent()
+            c.title = d["title"] as? String ?? "NextAlerts"
+            c.body = d["body"] as? String ?? ""
+            c.sound = .default
+            c.userInfo = ["link": d["link"] as? String ?? ""]
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+            return
+        }
         if message.body as? String == "retry" { web.load(URLRequest(url: home)) }
     }
 
