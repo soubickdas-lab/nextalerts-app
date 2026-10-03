@@ -21,6 +21,17 @@ for (const f of ["desktop/package.json", "desktop/package-lock.json"]) {
 const yml = `${__dirname}/ios/project.yml`;
 fs.writeFileSync(yml, fs.readFileSync(yml, "utf8").replace(/MARKETING_VERSION: .*/, `MARKETING_VERSION: "${v}"`));
 
+// the SideStore / AltStore source: one address that always points at the newest iPhone build
+const srcFile = `${__dirname}/sidestore.json`;
+const src = JSON.parse(fs.readFileSync(srcFile, "utf8"));
+const ipa = `https://github.com/soubickdas-lab/nextalerts-app/releases/download/v${v}/NextAlerts-${v}.ipa`;
+const when = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+const a0 = src.apps[0];
+a0.versions = [{ ...a0.versions[0], version: v, date: when, downloadURL: ipa }, ...a0.versions.filter((x) => x.version !== v)].slice(0, 5);
+Object.assign(a0, { version: v, versionDate: when, downloadURL: ipa });
+fs.writeFileSync(srcFile, JSON.stringify(src, null, 2) + "
+");
+
 run("git", ["add", "-A"]);
 run("git", ["commit", "-m", `Release v${v}`, "--allow-empty"]);
 run("git", ["tag", `v${v}`]);

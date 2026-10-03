@@ -1,0 +1,46 @@
+{
+  "name": "NextAlerts",
+  "identifier": "in.nextalerts.source",
+  "subtitle": "NextAlerts team dashboard",
+  "description": "The NextAlerts dashboard as an iPhone app.",
+  "iconURL": "https://work.nextalerts.in/icon-512.png",
+  "website": "https://nextalerts.in",
+  "tintColor": "6552F5",
+  "apps": [
+    {
+      "name": "NextAlerts",
+      "bundleIdentifier": "in.nextalerts.work",
+      "developerName": "NextAlerts Private Limited",
+      "subtitle": "Team dashboard",
+      "localizedDescription": "Opens the live NextAlerts dashboard (work.nextalerts.in). Website changes show up in the app by themselves.",
+      "iconURL": "https://work.nextalerts.in/icon-512.png",
+      "tintColor": "6552F5",
+      "category": "utilities",
+      "screenshotURLs": [],
+      "versions": [
+        {
+          "version": "1.0.6",
+          "date": "2026-10-03T16:01:57Z",
+          "localizedDescription": "Latest version.",
+          "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.6/NextAlerts-1.0.6.ipa",
+          "size": 58539,
+          "minOSVersion": "15.0"
+        }
+      ],
+      "version": "1.0.6",
+      "versionDate": "2026-10-03T16:01:57Z",
+      "versionDescription": "Latest version.",
+      "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.6/NextAlerts-1.0.6.ipa",
+      "size": 58539,
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSMicrophoneUsageDescription": "AI Voice can record your voice.",
+          "NSCameraUsageDescription": "Take a photo to attach.",
+          "NSPhotoLibraryAddUsageDescription": "Save a downloaded picture."
+        }
+      }
+    }
+  ],
+  "news": []
+}
