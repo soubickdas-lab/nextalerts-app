@@ -15,7 +15,6 @@
       "localizedDescription": "Opens the live NextAlerts dashboard (work.nextalerts.in). Website changes show up in the app by themselves.",
       "iconURL": "https://work.nextalerts.in/icon-512.png",
       "tintColor": "6552F5",
-      "category": "utilities",
       "screenshotURLs": [],
       "versions": [
         {
@@ -31,15 +30,7 @@
       "versionDate": "2026-10-03T16:01:57Z",
       "versionDescription": "Latest version.",
       "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.6/NextAlerts-1.0.6.ipa",
-      "size": 58539,
-      "appPermissions": {
-        "entitlements": [],
-        "privacy": {
-          "NSMicrophoneUsageDescription": "AI Voice can record your voice.",
-          "NSCameraUsageDescription": "Take a photo to attach.",
-          "NSPhotoLibraryAddUsageDescription": "Save a downloaded picture."
-        }
-      }
+      "size": 58539
     }
   ],
   "news": []
