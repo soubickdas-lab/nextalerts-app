@@ -29,8 +29,7 @@ const when = new Date().toISOString().replace(/\.\d+Z$/, "Z");
 const a0 = src.apps[0];
 a0.versions = [{ ...a0.versions[0], version: v, date: when, downloadURL: ipa }, ...a0.versions.filter((x) => x.version !== v)].slice(0, 5);
 Object.assign(a0, { version: v, versionDate: when, downloadURL: ipa });
-fs.writeFileSync(srcFile, JSON.stringify(src, null, 2) + "
-");
+fs.writeFileSync(srcFile, JSON.stringify(src, null, 2) + "\n");
 
 run("git", ["add", "-A"]);
 run("git", ["commit", "-m", `Release v${v}`, "--allow-empty"]);
