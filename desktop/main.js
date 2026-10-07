@@ -23,7 +23,7 @@ function saveState() {
   if (!win || win.isDestroyed()) return;
   const max = win.isMaximized();
   const b = max ? readState().bounds || win.getNormalBounds() : win.getNormalBounds();
-  try { fs.writeFileSync(stateFile(), JSON.stringify({ bounds: b, max })); } catch {}
+  try { fs.writeFileSync(stateFile(), JSON.stringify({ ...readState(), bounds: b, max })); } catch {}
 }
 
 const isOurs = (url) => { try { return new URL(url).origin === APP_ORIGIN; } catch { return false; } };
@@ -93,6 +93,14 @@ function createWindow() {
   win.loadURL(APP_URL);
 }
 
+// ------------------------------------------------------------ open at login
+const autostartOn = () => app.isPackaged && app.getLoginItemSettings({ args: ["--autostart"] }).openAtLogin;
+function setAutostart(on) {
+  app.setLoginItemSettings({ openAtLogin: on, args: ["--autostart"] });
+  try { fs.writeFileSync(stateFile(), JSON.stringify({ ...readState(), noAutostart: !on })); } catch {}
+  buildMenu();
+}
+
 // ------------------------------------------------------------ menu
 function buildMenu() {
   const mac = process.platform === "darwin";
@@ -101,6 +109,7 @@ function buildMenu() {
     { label: "File", submenu: [
       { label: "Home", accelerator: "CmdOrCtrl+Shift+H", click: () => win?.loadURL(APP_URL) },
       { label: "Check for updates…", click: () => checkAndTell() },
+      { label: "Open when the computer starts", type: "checkbox", checked: autostartOn(), click: (item) => setAutostart(item.checked) },
       { type: "separator" },
       mac ? { role: "close" } : { role: "quit" },
     ] },
@@ -245,6 +254,11 @@ if (!app.requestSingleInstanceLock()) {
     session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
       cb(isOurs(details.requestingUrl || wc.getURL()) && ["notifications", "clipboard-read", "clipboard-sanitized-write", "media", "fullscreen"].includes(permission));
     });
+    // open at login (Windows: Startup, Mac: Login Items). On by default; the tray / File menu can switch it off.
+    if (!SMOKE && app.isPackaged) {
+      const st = app.getLoginItemSettings({ args: ["--autostart"] });
+      if (!st.openAtLogin && !readState().noAutostart) app.setLoginItemSettings({ openAtLogin: true, args: ["--autostart"] });
+    }
     buildMenu();
     if (process.platform === "win32" && !SMOKE) {
       tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 16, height: 16 }));
@@ -252,6 +266,7 @@ if (!app.requestSingleInstanceLock()) {
       tray.setContextMenu(Menu.buildFromTemplate([
         { label: "Open NextAlerts", click: showWindow },
         { label: "Check for updates…", click: () => { showWindow(); checkAndTell(); } },
+        { label: "Open when the computer starts", type: "checkbox", checked: autostartOn(), click: (item) => setAutostart(item.checked) },
         { type: "separator" },
         { label: "Quit", click: () => { quitting = true; app.quit(); } },
       ]));
