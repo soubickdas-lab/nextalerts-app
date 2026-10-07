@@ -56,6 +56,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         cfg.userContentController.addUserScript(WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController.add(self, name: "app")
         cfg.userContentController.add(self, name: "notify")
+        cfg.userContentController.add(self, name: "badge")
         cfg.applicationNameForUserAgent = "NextAlertsApp/\(version) (iOS)"
 
         web = WKWebView(frame: .zero, configuration: cfg)
@@ -89,6 +90,11 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "badge" {
+            let n = (message.body as? NSNumber)?.intValue ?? Int((message.body as? String) ?? "") ?? 0
+            UIApplication.shared.applicationIconBadgeNumber = max(0, n)
+            return
+        }
         if message.name == "notify", let d = message.body as? [String: Any] {
             // the page raises a notification; iOS shows it as a normal banner
             let c = UNMutableNotificationContent()

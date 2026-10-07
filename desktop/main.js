@@ -239,6 +239,17 @@ ipcMain.handle("app:check-update", () => checkUpdate());
 ipcMain.handle("app:install-update", async () => { try { return await installUpdate(); } catch (err) { return { ok: false, message: String(err.message || err) }; } });
 ipcMain.handle("app:retry", () => { win?.loadURL(APP_URL); });
 ipcMain.handle("app:focus", () => { showWindow(); });
+// the red number on the icon: Windows draws the page's little badge image over the taskbar icon, the Mac Dock shows it by itself
+ipcMain.handle("app:badge", (e, n, image) => {
+  n = Math.max(0, Math.min(999, Number(n) || 0));
+  if (process.platform === "win32") {
+    if (!win) return;
+    try { win.setOverlayIcon(n && image ? nativeImage.createFromDataURL(image) : null, n ? `${n} unread` : ""); } catch {}
+    if (n && !win.isFocused()) win.flashFrame(true);
+  } else {
+    try { app.setBadgeCount(n); } catch {}
+  }
+});
 
 // ------------------------------------------------------------ start
 // tests run the app beside an installed one: a separate profile folder keeps the two apart

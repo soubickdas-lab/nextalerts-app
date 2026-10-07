@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     static final int REQ_FILE = 11, REQ_MIC = 12, REQ_NOTIFY = 13;
     static final String CHANNEL = "updates";
     int notifyId = 100;
+    volatile int badgeCount = 0;
 
     WebView web;
     ValueCallback<Uri[]> fileCallback;
@@ -324,6 +325,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void installUpdate() { runOnUiThread(MainActivity.this::startUpdate); }
         // the page raises a notification; the phone shows it like any other app's
         @JavascriptInterface public void notify(String title, String body, String link) { showNotification(title, body, link); }
+        @JavascriptInterface public void setBadge(int n) { badgeCount = Math.max(0, n); if (n == 0) runOnUiThread(() -> { try { ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancelAll(); } catch (Exception ignored) {} }); }
         @JavascriptInterface public void askNotify() { runOnUiThread(MainActivity.this::askNotifyPermission); }
         @JavascriptInterface public void retry() { runOnUiThread(() -> web.loadUrl(HOME)); }
         @JavascriptInterface public void fail(String why) { toast("Download failed: " + why); }
@@ -342,7 +344,7 @@ public class MainActivity extends Activity {
         try {
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null)
-                nm.createNotificationChannel(new NotificationChannel(CHANNEL, "NextAlerts", NotificationManager.IMPORTANCE_HIGH));
+            { NotificationChannel ch = new NotificationChannel(CHANNEL, "NextAlerts", NotificationManager.IMPORTANCE_HIGH); ch.setShowBadge(true); nm.createNotificationChannel(ch); }
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
             // a tap opens the app on the page the notification is about
             Intent open = new Intent(this, MainActivity.class);
@@ -352,6 +354,7 @@ public class MainActivity extends Activity {
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
             b.setSmallIcon(R.drawable.ic_notify).setColor(0xFF6552F5).setContentTitle(title).setContentText(body)
                     .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi);
+            if (badgeCount > 0) b.setNumber(badgeCount);
             if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
             nm.notify(notifyId++, b.build());
         } catch (Exception ignored) {}
