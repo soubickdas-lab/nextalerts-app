@@ -10,7 +10,6 @@ S = 1024
 TEAL_TOP, TEAL_BOT = (26, 178, 164), (9, 110, 102)
 INK = (255, 255, 255, 255)
 MINT = (176, 242, 230, 255)
-SPARK = (255, 209, 84, 255)
 
 
 def spark(d, cx, cy, r1, r2, fill):
@@ -58,8 +57,14 @@ def mark(size=S, radius=0.22, pad=0.0, bg=True):
     for (x, y, c) in [(nx0, top, INK), (nx0, bot, INK), (nx1, bot, INK), (nx1, top, INK), (ax, top, MINT), (ax2, bot, MINT), (nx1 + 2 * u, bot, MINT)]:
         d.ellipse([x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2], fill=c)
     x1 = ax - 16 * u  # (keeps the spark line below unchanged)
-    # the spark sits where the A's crossbar would be
-    spark(d, x1 + 16 * u, a + 58 * u, 7.5 * u, 3 * u, SPARK)
+    # the A's crossbar, and an alert dot riding on its apex — the mark's own "you have something new"
+    d.line([(ax - 9 * u, a + 58 * u), (ax + 9 * u, a + 58 * u)], fill=MINT, width=int(sw * 0.7))
+    for x in (ax - 9 * u, ax + 9 * u):
+        d.ellipse([x - sw * 0.35, a + 58 * u - sw * 0.35, x + sw * 0.35, a + 58 * u + sw * 0.35], fill=MINT)
+    dr = 8.5 * u
+    cx, cy = ax + 15 * u, a + 21 * u
+    d.ellipse([cx - dr - 2.6 * u, cy - dr - 2.6 * u, cx + dr + 2.6 * u, cy + dr + 2.6 * u], fill=tuple(TEAL_TOP) + (255,) if bg else (0, 0, 0, 0))
+    d.ellipse([cx - dr, cy - dr, cx + dr, cy + dr], fill=(255, 112, 84, 255))
     return im.resize((size, size), Image.LANCZOS)
 
 
