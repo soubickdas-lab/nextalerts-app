@@ -1,7 +1,7 @@
 // NextAlerts desktop app: one window that opens the live dashboard. Every change made on the website is in the
 // app the moment it is deployed; only the shell itself (this file) needs a new installer, and the app fetches
 // that from the GitHub release by itself when the Update button is pressed.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, dialog, session, nativeTheme } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, dialog, session, nativeTheme, screen } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn, execFile } = require("node:child_process");
@@ -30,11 +30,20 @@ const isOurs = (url) => { try { return new URL(url).origin === APP_ORIGIN; } cat
 
 function createWindow() {
   const st = readState();
+  // a saved position is only used when it is still on a screen (a monitor that was unplugged left the window
+  // off-screen, which looked like the app had vanished); otherwise the window opens centred
+  let b = st.bounds || {};
+  try {
+    const onScreen = b.x != null && screen.getAllDisplays().some((d) => { const a = d.workArea; return b.x + 80 < a.x + a.width && b.x + (b.width || 0) - 80 > a.x && b.y + 40 < a.y + a.height && b.y >= a.y - 20; });
+    if (!onScreen) b = { width: b.width, height: b.height };
+    const wa = screen.getPrimaryDisplay().workArea;
+    b.width = Math.min(b.width || 1320, wa.width); b.height = Math.min(b.height || 860, wa.height);
+  } catch { b = {}; }
   win = new BrowserWindow({
-    width: st.bounds?.width || 1320,
-    height: st.bounds?.height || 860,
-    x: st.bounds?.x,
-    y: st.bounds?.y,
+    width: b.width || 1320,
+    height: b.height || 860,
+    x: b.x,
+    y: b.y,
     minWidth: 380,
     minHeight: 560,
     title: "NextAlerts",
@@ -52,7 +61,7 @@ function createWindow() {
     },
   });
   if (st.max) win.maximize();
-  win.once("ready-to-show", () => { if (!SMOKE) win.show(); });
+  win.once("ready-to-show", () => { if (!SMOKE) { win.show(); win.focus(); } });
   // closing the window only hides it: the app stays in the tray (Windows) / Dock (Mac) so notifications keep
   // coming. "Quit" in the tray or menu really closes it.
   win.on("close", (e) => {
@@ -282,6 +291,7 @@ if (!app.requestSingleInstanceLock()) {
         { label: "Quit", click: () => { quitting = true; app.quit(); } },
       ]));
       tray.on("click", showWindow);
+      tray.on("double-click", showWindow);
     }
     createWindow();
     app.on("activate", () => showWindow());

@@ -18,6 +18,14 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.10",
+          "date": "2026-10-08T20:20:46Z",
+          "localizedDescription": "Latest version.",
+          "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.10/NextAlerts-1.0.10.ipa",
+          "size": 58539,
+          "minOSVersion": "15.0"
+        },
+        {
           "version": "1.0.9",
           "date": "2026-10-08T18:09:29Z",
           "localizedDescription": "Latest version.",
@@ -50,10 +58,10 @@
           "minOSVersion": "15.0"
         }
       ],
-      "version": "1.0.9",
-      "versionDate": "2026-10-08T18:09:29Z",
+      "version": "1.0.10",
+      "versionDate": "2026-10-08T20:20:46Z",
       "versionDescription": "Latest version.",
-      "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.9/NextAlerts-1.0.9.ipa",
+      "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.10/NextAlerts-1.0.10.ipa",
       "size": 58539
     }
   ],
