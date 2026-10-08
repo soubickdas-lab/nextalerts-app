@@ -352,7 +352,7 @@ public class MainActivity extends Activity {
             open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             PendingIntent pi = PendingIntent.getActivity(this, notifyId, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
-            b.setSmallIcon(R.drawable.ic_notify).setColor(0xFF6552F5).setContentTitle(title).setContentText(body)
+            b.setSmallIcon(R.drawable.ic_notify).setColor(0xFF0E9488).setContentTitle(title).setContentText(body)
                     .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi);
             if (badgeCount > 0) b.setNumber(badgeCount);
             if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
@@ -443,8 +443,8 @@ public class MainActivity extends Activity {
     static final String OFFLINE_HTML = "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             + "<style>body{margin:0;height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#eceef6;color:#121430}"
             + ".b{text-align:center;padding:24px;max-width:320px}.l{width:64px;height:64px;border-radius:18px;margin:0 auto 18px;background:linear-gradient(180deg,#7c6cff,#5a4ae6);display:grid;place-items:center;color:#fff;font-weight:800;font-size:30px}"
-            + "h1{font-size:19px;margin:0 0 6px}p{margin:0 0 20px;color:#6a6f92}button{border:0;border-radius:12px;background:#6552f5;color:#fff;font:inherit;font-weight:600;padding:12px 26px}</style></head>"
-            + "<body><div class='b'><div class='l'>N</div><h1>Can't reach NextAlerts</h1><p>Check the internet connection, then try again.</p>"
+            + "h1{font-size:19px;margin:0 0 6px}p{margin:0 0 20px;color:#6a6f92}button{border:0;border-radius:12px;background:#0e9488;color:#fff;font:inherit;font-weight:600;padding:12px 26px}</style></head>"
+            + "<body><div class='b'><div class='l' style='width:auto;padding:0 16px;font-size:20px'>NextAlerts</div><h1>Can't reach NextAlerts</h1><p>Check the internet connection, then try again.</p>"
             + "<button onclick='NextAlertsAndroid.retry()'>Try again</button></div>"
             + "<script>window.addEventListener('online',function(){NextAlertsAndroid.retry()});setInterval(function(){if(navigator.onLine)NextAlertsAndroid.retry()},8000)</script></body></html>";
 }

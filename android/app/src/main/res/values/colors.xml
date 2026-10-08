@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#6552F5</color>
+    <color name="brand">#0E9488</color>
     <color name="page">#ECEEF6</color>
-    <color name="ic_launcher_background">#6A5AF2</color>
+    <color name="ic_launcher_background">#128C80</color>
 </resources>

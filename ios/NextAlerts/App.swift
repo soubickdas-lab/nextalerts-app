@@ -214,9 +214,9 @@ let offlineHTML = """
 <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>:root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:17px/1.5 -apple-system,sans-serif;background:#eceef6;color:#121430}
 .b{text-align:center;padding:24px;max-width:320px}.l{width:64px;height:64px;border-radius:18px;margin:0 auto 18px;background:linear-gradient(180deg,#7c6cff,#5a4ae6);display:grid;place-items:center;color:#fff;font-weight:800;font-size:30px}
-h1{font-size:20px;margin:0 0 6px}p{margin:0 0 20px;color:#6a6f92}button{border:0;border-radius:12px;background:#6552f5;color:#fff;font:inherit;font-weight:600;padding:12px 26px}
+h1{font-size:20px;margin:0 0 6px}p{margin:0 0 20px;color:#6a6f92}button{border:0;border-radius:12px;background:#0e9488;color:#fff;font:inherit;font-weight:600;padding:12px 26px}
 @media(prefers-color-scheme:dark){body{background:#0b0c1a;color:#eceeff}p{color:#9194bb}}</style></head>
-<body><div class='b'><div class='l'>N</div><h1>Can't reach NextAlerts</h1><p>Check the internet connection, then try again.</p>
+<body><div class='b'><div class='l' style='width:auto;padding:0 16px;font-size:20px'>NextAlerts</div><h1>Can't reach NextAlerts</h1><p>Check the internet connection, then try again.</p>
 <button onclick="window.webkit.messageHandlers.app.postMessage('retry')">Try again</button></div>
 <script>window.addEventListener('online',function(){window.webkit.messageHandlers.app.postMessage('retry')})</script></body></html>
 """
