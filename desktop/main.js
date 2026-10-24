@@ -335,7 +335,7 @@ function paintTray() {
   if (!tray) return;
   const left = today ? (today.uploads || []).filter((u) => !u.done).length + (today.tasks || []).filter((t) => !t.done).length : 0;
   tray.setToolTip(left ? `NextAlerts · ${left} left for today` : "NextAlerts");
-  if (process.platform === "darwin") tray.setTitle(left ? ` ${left}` : "");
+  // no number beside the menu-bar icon — the count is in the tooltip and the panel
   pop?.webContents.send("tray:data", trayData());
 }
 function startTray() {
