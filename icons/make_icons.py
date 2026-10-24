@@ -1,70 +1,39 @@
-# The NextAlerts mark: a deep-teal tile, the letters N and A cut from one shape (the A's right leg becomes the N's
-# upstroke) with a small spark where the A's crossbar would be. Writes every size each platform needs.
+# The NextAlerts mark, quiet version: a charcoal tile, one thin geometric "N" drawn as a single stroke, and a small
+# lime dot at the top right — the alert. Nothing else. Writes every size each platform needs.
 # Run: python icons/make_icons.py   (from the repo root)
-import math
 import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 S = 1024
-TEAL_TOP, TEAL_BOT = (26, 178, 164), (9, 110, 102)
-INK = (255, 255, 255, 255)
-MINT = (176, 242, 230, 255)
+INK = (20, 20, 22, 255)
+PAPER = (255, 255, 255, 255)
+LIME = (228, 245, 92, 255)
 
 
-def spark(d, cx, cy, r1, r2, fill):
-    pts = []
-    for k in range(8):
-        ang = -math.pi / 2 + k * math.pi / 4
-        rr = r1 if k % 2 == 0 else r2
-        pts.append((cx + rr * math.cos(ang), cy + rr * math.sin(ang)))
-    d.polygon(pts, fill=fill)
-
-
-def mark(size=S, radius=0.22, pad=0.0, bg=True):
+def mark(size=S, radius=0.22, pad=0.0, bg=True, invert=False):
     """pad = empty margin around the tile (fraction); radius = corner radius (fraction of the tile)."""
     big = size * 4
     im = Image.new('RGBA', (big, big), (0, 0, 0, 0))
     a, b = int(big * pad), int(big * (1 - pad))
     w = b - a
-    if bg:
-        grad = Image.new('RGBA', (big, big))
-        gd = ImageDraw.Draw(grad)
-        for y in range(big):
-            t = y / big
-            gd.line([(0, y), (big, y)], fill=tuple(int(TEAL_TOP[i] + (TEAL_BOT[i] - TEAL_TOP[i]) * t) for i in range(3)) + (255,))
-        mask = Image.new('L', (big, big), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([a, a, b, b], radius=int(w * radius), fill=255)
-        im.paste(grad, (0, 0), mask)
-        # a soft inner highlight so the tile does not look flat
-        hl = Image.new('RGBA', (big, big), (0, 0, 0, 0))
-        hd = ImageDraw.Draw(hl)
-        hd.ellipse([a - w * 0.3, a - w * 0.55, a + w * 0.9, a + w * 0.45], fill=(255, 255, 255, 26))
-        im.alpha_composite(Image.composite(hl, Image.new('RGBA', (big, big), (0, 0, 0, 0)), mask))
     d = ImageDraw.Draw(im)
-    u = w / 100  # grid units
-    sw = 10 * u  # stroke width
-    # N: left leg up, diagonal down, right leg up — then the A leans on the N's right foot
-    nx0, nx1 = a + 14 * u, a + 50 * u
-    ax = a + 69 * u            # the A's apex
-    ax2 = a + 88 * u           # the A's right foot
-    top, bot = a + 24 * u, a + 76 * u
-    d.line([(nx0, bot), (nx0, top)], fill=INK, width=int(sw))
-    d.line([(nx0, top), (nx1, bot)], fill=INK, width=int(sw))
-    d.line([(nx1, bot), (nx1, top)], fill=INK, width=int(sw))
-    d.line([(nx1 + 2 * u, bot), (ax, top)], fill=MINT, width=int(sw))
-    d.line([(ax, top), (ax2, bot)], fill=MINT, width=int(sw))
-    for (x, y, c) in [(nx0, top, INK), (nx0, bot, INK), (nx1, bot, INK), (nx1, top, INK), (ax, top, MINT), (ax2, bot, MINT), (nx1 + 2 * u, bot, MINT)]:
-        d.ellipse([x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2], fill=c)
-    x1 = ax - 16 * u  # (keeps the spark line below unchanged)
-    # the A's crossbar, and an alert dot riding on its apex — the mark's own "you have something new"
-    d.line([(ax - 9 * u, a + 58 * u), (ax + 9 * u, a + 58 * u)], fill=MINT, width=int(sw * 0.7))
-    for x in (ax - 9 * u, ax + 9 * u):
-        d.ellipse([x - sw * 0.35, a + 58 * u - sw * 0.35, x + sw * 0.35, a + 58 * u + sw * 0.35], fill=MINT)
-    dr = 8.5 * u
-    cx, cy = ax + 15 * u, a + 21 * u
-    d.ellipse([cx - dr - 2.6 * u, cy - dr - 2.6 * u, cx + dr + 2.6 * u, cy + dr + 2.6 * u], fill=tuple(TEAL_TOP) + (255,) if bg else (0, 0, 0, 0))
-    d.ellipse([cx - dr, cy - dr, cx + dr, cy + dr], fill=(255, 112, 84, 255))
+    tile, stroke = (PAPER, INK) if invert else (INK, PAPER)
+    if bg:
+        d.rounded_rectangle([a, a, b, b], radius=int(w * radius), fill=tile)
+    u = w / 100
+    sw = 7.5 * u
+    # the N: left leg up, one diagonal, right leg up — slightly condensed, centred a touch left to leave room for the dot
+    x0, x1 = a + 30 * u, a + 62 * u
+    top, bot = a + 28 * u, a + 72 * u
+    pts = [(x0, bot), (x0, top), (x1, bot), (x1, top)]
+    d.line(pts, fill=stroke, width=int(sw), joint='curve')
+    for (x, y) in pts:
+        d.ellipse([x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2], fill=stroke)
+    # the alert dot
+    r = 6.5 * u
+    cx, cy = a + 74 * u, a + 28 * u
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=LIME)
     return im.resize((size, size), Image.LANCZOS)
 
 
