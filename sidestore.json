@@ -18,6 +18,14 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "1.0.13",
+          "date": "2026-10-24T03:48:03Z",
+          "localizedDescription": "Latest version.",
+          "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.13/NextAlerts-1.0.13.ipa",
+          "size": 58539,
+          "minOSVersion": "15.0"
+        },
+        {
           "version": "1.0.12",
           "date": "2026-10-24T02:06:42Z",
           "localizedDescription": "Latest version.",
@@ -48,20 +56,12 @@
           "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.9/NextAlerts-1.0.9.ipa",
           "size": 58539,
           "minOSVersion": "15.0"
-        },
-        {
-          "version": "1.0.8",
-          "date": "2026-10-07T18:38:11Z",
-          "localizedDescription": "Latest version.",
-          "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.8/NextAlerts-1.0.8.ipa",
-          "size": 58539,
-          "minOSVersion": "15.0"
         }
       ],
-      "version": "1.0.12",
-      "versionDate": "2026-10-24T02:06:42Z",
+      "version": "1.0.13",
+      "versionDate": "2026-10-24T03:48:03Z",
       "versionDescription": "Latest version.",
-      "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.12/NextAlerts-1.0.12.ipa",
+      "downloadURL": "https://github.com/soubickdas-lab/nextalerts-app/releases/download/v1.0.13/NextAlerts-1.0.13.ipa",
       "size": 58539
     }
   ],
