@@ -257,61 +257,86 @@ const api = async (p, opts = {}) => {
 };
 async function loadToday() {
   try { today = await api("/quick/today"); todayErr = ""; }
-  catch (e) { todayErr = e.status === 401 ? "Sign in to NextAlerts first" : e.status === 503 ? "Server busy — try again soon" : "Could not load today"; }
+  catch (e) { todayErr = e.status === 401 ? "Sign in to NextAlerts first" : e.status === 503 ? "The server is busy right now — try again in a little while" : "Could not load today — check the internet"; }
   todayAt = Date.now();
   paintTray();
-  if (process.env.NA_TRAY_DUMP) console.log("TRAY", todayErr || "", JSON.stringify(trayMenu().items.map((i) => (i.type === "checkbox" ? (i.checked ? "[x] " : "[ ] ") : "") + (i.label || "---"))));
+  if (process.env.NA_TRAY_DUMP) console.log("TRAY", JSON.stringify({ err: todayErr, today }));
 }
-const short = (s, n = 34) => (String(s).length > n ? String(s).slice(0, n - 1) + "…" : String(s));
-async function tickUpload(u) {
-  const day = today.day;
-  const body = u.per > 1 ? { track_id: u.id, day, n: u.done ? 0 : u.n + 1 } : { track_id: u.id, day, on: !u.done };
-  try { await api("/tracker/tick", { method: "POST", body }); } catch (e) { notifyTray("Could not tick " + u.channel, e.message); }
-  await loadToday();
-  win?.webContents.executeJavaScript("window.dispatchEvent(new Event('na-external-change'))").catch(() => {});
+const external = () => win?.webContents.executeJavaScript("window.dispatchEvent(new Event('na-external-change'))").catch(() => {});
+async function tickUpload(id) {
+  const u = (today?.uploads || []).find((x) => x.id === id);
+  if (!u) return;
+  const body = u.per > 1 ? { track_id: u.id, day: today.day, n: u.done ? 0 : u.n + 1 } : { track_id: u.id, day: today.day, on: !u.done };
+  try { await api("/tracker/tick", { method: "POST", body }); todayErr = ""; } catch (e) { todayErr = `Could not tick ${u.channel}: ${e.message}`; }
+  await loadToday(); external();
 }
-async function tickTask(t) {
-  try { await api(`/todos/${t.id}`, { method: "PUT", body: { status: t.done ? "To do" : "Done" } }); } catch (e) { notifyTray("Could not update the task", e.message); }
-  await loadToday();
-  win?.webContents.executeJavaScript("window.dispatchEvent(new Event('na-external-change'))").catch(() => {});
+async function tickTask(id) {
+  const t = (today?.tasks || []).find((x) => x.id === id);
+  if (!t) return;
+  try { await api(`/todos/${t.id}`, { method: "PUT", body: { status: t.done ? "To do" : "Done" } }); todayErr = ""; } catch (e) { todayErr = `Could not update the task: ${e.message}`; }
+  await loadToday(); external();
 }
-function notifyTray(title, body) { try { const { Notification } = require("electron"); new Notification({ title, body }).show(); } catch {} }
-function trayMenu() {
-  const items = [];
-  const dayLabel = today ? new Date(today.day + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "Today";
-  if (todayErr && !today) items.push({ label: todayErr, enabled: false });
-  if (today) {
-    const ups = today.uploads || [];
-    const left = ups.filter((u) => !u.done).length;
-    items.push({ label: `Uploads · ${dayLabel}${ups.length ? ` · ${ups.length - left}/${ups.length} done` : ""}`, enabled: false });
-    if (!ups.length) items.push({ label: "   Nothing due today", enabled: false });
-    for (const u of ups) {
-      const kind = /short/i.test(u.type) ? "Shorts" : "Long";
-      const label = `${short(u.channel)}  ·  ${kind}${u.per > 1 ? `  ·  ${u.done ? u.per : u.n}/${u.per}` : ""}`;
-      items.push({ label, type: "checkbox", checked: !!u.done, enabled: today.can_tick !== false, click: () => tickUpload(u) });
-    }
-    items.push({ type: "separator" });
-    const ts = today.tasks || [];
-    items.push({ label: `Tasks for today${ts.length ? ` · ${ts.filter((t) => t.done).length}/${ts.length} done` : ""}`, enabled: false });
-    if (!ts.length) items.push({ label: "   No tasks due today", enabled: false });
-    for (const t of ts) items.push({ label: `${short(t.title, 40)}${t.late && !t.done ? "  ·  overdue" : ""}`, type: "checkbox", checked: !!t.done, click: () => tickTask(t) });
-    if (todayErr) items.push({ label: todayErr, enabled: false });
+
+// ---- the today panel: a small frameless window under the menu-bar icon (Mac) / above the tray icon (Windows)
+let pop = null, popH = 360, popHiddenAt = 0;
+const POP_W = 320;
+function makePop() {
+  const mac = process.platform === "darwin";
+  pop = new BrowserWindow({
+    width: POP_W, height: popH, show: false, frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
+    fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: true, roundedCorners: true,
+    transparent: mac, vibrancy: mac ? "popover" : undefined, visualEffectState: mac ? "active" : undefined,
+    backgroundColor: mac ? "#00000000" : (nativeTheme.shouldUseDarkColors ? "#1c1c1f" : "#ffffff"),
+    webPreferences: { preload: path.join(__dirname, "tray-preload.js"), contextIsolation: true, sandbox: true, backgroundThrottling: true },
+  });
+  pop.loadFile(path.join(__dirname, "tray.html"));
+  pop.on("blur", () => { if (process.env.NA_TRAY_SHOT) return; pop.hide(); popHiddenAt = Date.now(); });
+  pop.webContents.on("console-message", (...a) => { if (process.env.NA_TRAY_SHOT) console.log("POP", a.slice(1).join(" ")); });
+  pop.webContents.on("will-navigate", (e) => e.preventDefault());
+  pop.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+}
+function placePop() {
+  const b = tray.getBounds();
+  const disp = screen.getDisplayNearestPoint({ x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) });
+  const wa = disp.workArea;
+  let x = Math.round(b.x + b.width / 2 - POP_W / 2), y;
+  if (process.platform === "darwin") y = Math.round(b.y + b.height + 6);
+  else {
+    // Windows: the taskbar can sit on any edge; open towards the screen
+    const bottom = b.y > wa.y + wa.height / 2;
+    y = bottom ? Math.round(wa.y + wa.height - popH - 10) : Math.round(wa.y + 10);
+    if (b.x > wa.x + wa.width - 40 || b.x < wa.x) x = wa.x + wa.width - POP_W - 10; // taskbar on the side / overflow area
   }
-  items.push({ type: "separator" },
-    { label: "Refresh", click: () => loadToday() },
-    { label: "Open NextAlerts", click: showWindow },
-    { label: "Check for updates…", click: () => { showWindow(); checkAndTell(); } },
-    { label: "Open when the computer starts", type: "checkbox", checked: autostartOn(), click: (item) => setAutostart(item.checked) },
-    { type: "separator" },
-    { label: "Quit NextAlerts", click: () => { quitting = true; app.quit(); } });
-  return Menu.buildFromTemplate(items);
+  x = Math.max(wa.x + 8, Math.min(x, wa.x + wa.width - POP_W - 8));
+  y = Math.max(wa.y + 4, Math.min(y, wa.y + wa.height - popH - 4));
+  pop.setBounds({ x, y, width: POP_W, height: popH });
 }
+function togglePop() {
+  if (!pop) makePop();
+  if (pop.isVisible()) { pop.hide(); return; }
+  if (Date.now() - popHiddenAt < 250) return; // the click that blurred it should not reopen it
+  placePop(); pop.show(); pop.focus();
+  if (Date.now() - todayAt > 20000) loadToday();
+}
+const trayData = () => ({ today, err: todayErr });
+ipcMain.handle("tray:get", () => trayData());
+ipcMain.handle("tray:refresh", () => loadToday());
+ipcMain.handle("tray:tick-upload", (e, id) => tickUpload(id));
+ipcMain.handle("tray:tick-task", (e, id) => tickTask(id));
+ipcMain.handle("tray:open", () => { pop?.hide(); showWindow(); });
+ipcMain.handle("tray:hide", () => pop?.hide());
+ipcMain.handle("tray:quit", () => { quitting = true; app.quit(); });
+ipcMain.handle("tray:size", (e, h) => {
+  popH = Math.max(160, Math.min(560, Math.round(h)));
+  if (pop && pop.isVisible()) placePop();
+});
+
 function paintTray() {
   if (!tray) return;
-  tray.setContextMenu(trayMenu());
   const left = today ? (today.uploads || []).filter((u) => !u.done).length + (today.tasks || []).filter((t) => !t.done).length : 0;
   tray.setToolTip(left ? `NextAlerts · ${left} left for today` : "NextAlerts");
   if (process.platform === "darwin") tray.setTitle(left ? ` ${left}` : "");
+  pop?.webContents.send("tray:data", trayData());
 }
 function startTray() {
   const img = process.platform === "darwin"
@@ -319,18 +344,19 @@ function startTray() {
     : nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 16, height: 16 });
   tray = new Tray(img);
   tray.setToolTip("NextAlerts");
-  paintTray();
-  // Windows: left click opens the window, right click shows the menu (fresh). Mac: any click shows the menu.
-  if (process.platform === "win32") {
-    tray.on("click", showWindow);
-    tray.on("double-click", showWindow);
-    tray.on("right-click", () => { if (Date.now() - todayAt > 20000) loadToday(); });
-  } else {
-    tray.on("mouse-enter", () => { if (Date.now() - todayAt > 20000) loadToday(); });
-    tray.on("click", () => { if (Date.now() - todayAt > 20000) loadToday(); });
-  }
+  tray.on("click", togglePop);
+  tray.on("right-click", togglePop);
+  if (process.platform === "win32") tray.on("double-click", () => { pop?.hide(); showWindow(); });
   setTimeout(loadToday, 8000);
   setInterval(loadToday, 10 * 60000);
+  // test hook: open the panel and save a picture of it (NA_TRAY_SHOT=<file.png>)
+  if (process.env.NA_TRAY_SHOT) setTimeout(async () => {
+    if (process.env.NA_THEME) nativeTheme.themeSource = process.env.NA_THEME;
+    togglePop(); await new Promise((r) => setTimeout(r, 3000)); console.log("VISIBLE", pop.isVisible());
+    if (process.env.NA_TRAY_CLICK) { await pop.webContents.executeJavaScript("document.querySelector('[data-t]')?.click()"); await new Promise((r) => setTimeout(r, 3000)); }
+    const img = await pop.webContents.capturePage();
+    fs.writeFileSync(process.env.NA_TRAY_SHOT, img.toPNG()); console.log("SHOT", pop.getBounds()); app.exit(0);
+  }, 11000);
 }
 // Open a YouTube / Studio page in a given Chrome profile (Chrome's own --profile-directory switch). Lets the dashboard
 // open Studio in profiles that do not have the Browser Hub extension. Only youtube.com addresses, only a profile

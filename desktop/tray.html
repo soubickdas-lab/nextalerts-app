@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>NextAlerts — Today</title>
+<style>
+  :root {
+    --bg: rgba(255,255,255,.86); --solid: #ffffff; --text: #141416; --muted: #8b8b92; --line: rgba(20,20,22,.08);
+    --hover: rgba(20,20,22,.05); --ring: #c9c9c3; --lime: #e4f55c; --ink: #141416; --late: #d6514d; --chip: rgba(20,20,22,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: rgba(28,28,31,.82); --solid: #1c1c1f; --text: #ececea; --muted: #8f8f98; --line: rgba(255,255,255,.08);
+      --hover: rgba(255,255,255,.06); --ring: #4a4a52; --chip: rgba(255,255,255,.08); --late: #f07b76; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; color: var(--text); font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; cursor: default; overflow: hidden; }
+  body.win .card { background: var(--solid); border: 1px solid var(--line); }
+  .card { background: var(--bg); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 12px 12px 16px; }
+  .ttl { flex: 1; min-width: 0; }
+  .ttl b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+  .ttl span { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .ib { width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+  .ib:hover { background: var(--hover); color: var(--text); }
+  .ib svg { width: 15px; height: 15px; }
+  .ib.spin svg { animation: spin .7s linear 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .bar { height: 3px; margin: 0 16px 10px; background: var(--chip); border-radius: 99px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--lime); border-radius: 99px; transition: width .3s ease; }
+  main { overflow-y: hidden; padding: 0 6px 8px; scrollbar-width: thin; flex: 1 1 auto; min-height: 0; }
+  main.scroll { overflow-y: auto; }
+  main::-webkit-scrollbar { width: 6px; } main::-webkit-scrollbar-thumb { background: var(--chip); border-radius: 9px; }
+  h6 { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; padding: 10px 10px 4px; display: flex; justify-content: space-between; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+  .row:hover { background: var(--hover); }
+  .row.off { cursor: default; opacity: .6; }
+  .ck { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--ring); display: grid; place-items: center; transition: background .15s, border-color .15s; }
+  .ck svg { width: 11px; height: 11px; opacity: 0; color: var(--ink); }
+  .row:hover .ck { border-color: var(--muted); }
+  .done .ck { background: var(--lime); border-color: var(--lime); }
+  .done .ck svg { opacity: 1; }
+  .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .done .nm { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--ring); }
+  .tag { flex: none; font-size: 11px; color: var(--muted); background: var(--chip); padding: 1px 7px; border-radius: 99px; }
+  .tag.late { color: var(--late); background: transparent; padding-right: 0; }
+  .cnt { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .busy { opacity: .45; pointer-events: none; }
+  .empty { padding: 6px 10px 10px; color: var(--muted); font-size: 12.5px; }
+  .msg { margin: 10px 16px 14px; padding: 10px 12px; border-radius: 9px; background: var(--chip); color: var(--muted); font-size: 12.5px; }
+  .msg button { margin-top: 8px; border: 0; background: var(--ink); color: var(--solid); border-radius: 7px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  .mark { width: 26px; height: 26px; border-radius: 7px; background: #141416; display: grid; place-items: center; flex: none; cursor: pointer; }
+  .mark svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <header>
+    <div class="mark" id="open" title="Open NextAlerts"><svg viewBox="0 0 24 24" fill="none"><path d="M7 17V7l8 10V7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="6.5" r="2.2" fill="#e4f55c"/></svg></div>
+    <div class="ttl"><b id="t">Today</b><span id="s">Loading…</span></div>
+    <button class="ib" id="ref" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    <button class="ib" id="quit" title="Quit NextAlerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></button>
+  </header>
+  <div class="bar"><i id="bar" style="width:0"></i></div>
+  <main id="list"></main>
+</div>
+<script>
+  const T = window.trayApi;
+  const CK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  if (T.platform !== 'darwin') document.body.classList.add('win');
+  let state = { today: null, err: '' };
+  function draw() {
+    const { today, err } = state, list = document.getElementById('list');
+    if (!today) {
+      document.getElementById('t').textContent = 'Today';
+      document.getElementById('s').textContent = err ? '' : 'Loading…';
+      list.innerHTML = err ? `<div class="msg">${esc(err)}${/sign in/i.test(err) ? '<br><button id="signin">Open NextAlerts</button>' : ''}</div>` : '';
+      const b = document.getElementById('signin'); if (b) b.onclick = () => T.open();
+      return fit();
+    }
+    const ups = today.uploads || [], ts = today.tasks || [];
+    const all = ups.length + ts.length, done = ups.filter((u) => u.done).length + ts.filter((t) => t.done).length;
+    document.getElementById('t').textContent = new Date(today.day + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+    document.getElementById('s').textContent = all ? (done === all ? 'All done for today' : `${all - done} left · ${done} of ${all} done`) : 'Nothing due today';
+    document.getElementById('bar').style.width = all ? Math.round((done / all) * 100) + '%' : '0';
+    const up = (u) => {
+      const kind = /short/i.test(u.type) ? 'Shorts' : 'Long';
+      return `<div class="row ${u.done ? 'done' : ''} ${today.can_tick === false ? 'off' : ''}" data-u="${u.id}"><span class="ck">${CK}</span><span class="nm">${esc(u.channel)}</span>${u.per > 1 ? `<span class="cnt">${u.done ? u.per : u.n}/${u.per}</span>` : ''}<span class="tag">${kind}</span></div>`;
+    };
+    const tk = (t) => `<div class="row ${t.done ? 'done' : ''}" data-t="${t.id}"><span class="ck">${CK}</span><span class="nm" title="${esc(t.title)}">${esc(t.title)}</span>${t.late && !t.done ? '<span class="tag late">Overdue</span>' : ''}</div>`;
+    list.innerHTML = `<h6><span>Uploads</span><span>${ups.filter((u) => u.done).length}/${ups.length}</span></h6>${ups.length ? ups.map(up).join('') : '<div class="empty">No uploads due today</div>'}
+      <h6><span>Tasks</span><span>${ts.filter((t) => t.done).length}/${ts.length}</span></h6>${ts.length ? ts.map(tk).join('') : '<div class="empty">No tasks for today</div>'}
+      ${err ? `<div class="msg">${esc(err)}</div>` : ''}`;
+    list.querySelectorAll('[data-u]').forEach((el) => el.onclick = () => { if (today.can_tick === false) return; el.classList.add('busy'); T.tickUpload(Number(el.dataset.u)); });
+    list.querySelectorAll('[data-t]').forEach((el) => el.onclick = () => { el.classList.add('busy'); T.tickTask(Number(el.dataset.t)); });
+    fit();
+  }
+  function fit() {
+    // measure the card at its natural height (whole list), size the window to it — it scrolls only past the limit
+    requestAnimationFrame(() => { const c = document.getElementById('card'); c.style.height = 'auto'; const h = c.scrollHeight; c.style.height = ''; T.size(Math.ceil(h) + 1); });
+  }
+  document.getElementById('ref').onclick = (e) => { const b = e.currentTarget; b.classList.remove('spin'); void b.offsetWidth; b.classList.add('spin'); T.refresh(); };
+  document.getElementById('quit').onclick = () => T.quit();
+  document.getElementById('open').onclick = () => T.open();
+  // a scrollbar only when the list is really longer than the panel can grow
+  window.addEventListener('resize', () => { const m = document.getElementById('list'); m.classList.toggle('scroll', m.scrollHeight > m.clientHeight + 6); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') T.hide(); });
+  T.onData((d) => { state = d; draw(); });
+  T.get().then((d) => { state = d; draw(); });
+</script>
+</body>
+</html>

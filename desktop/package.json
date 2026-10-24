@@ -25,6 +25,8 @@
       "icon.png",
       "icon-1024.png",
       "trayTemplate.png",
+      "tray.html",
+      "tray-preload.js",
       "trayTemplate@2x.png"
     ],
     "win": {
