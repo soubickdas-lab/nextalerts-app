@@ -57,7 +57,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: true,
-      backgroundThrottling: false, // keep listening for notifications while the window is hidden
+      backgroundThrottling: true, // hidden window sleeps; the live socket still delivers messages (false here heated Macs)
     },
   });
   if (st.max) win.maximize();
@@ -244,6 +244,114 @@ async function checkAndTell() {
 }
 
 ipcMain.handle("app:version", () => app.getVersion());
+
+// ---------- quick ticks from the tray (Windows) / menu bar (Mac) ----------
+// Today's uploads and tasks, ticked without opening the window. Data comes from the same signed-in session the
+// window uses, so nothing extra is stored. The list refreshes when the menu is opened and after every tick.
+let today = null, todayAt = 0, todayErr = "";
+const api = async (p, opts = {}) => {
+  const res = await session.defaultSession.fetch(APP_URL + "/api" + p, { method: opts.method || "GET", headers: opts.body ? { "content-type": "application/json" } : {}, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(j.error || `server ${res.status}`); e.status = res.status; throw e; }
+  return j;
+};
+async function loadToday() {
+  try { today = await api("/quick/today"); todayErr = ""; }
+  catch (e) { todayErr = e.status === 401 ? "Sign in to NextAlerts first" : e.status === 503 ? "Server busy — try again soon" : "Could not load today"; }
+  todayAt = Date.now();
+  paintTray();
+  if (process.env.NA_TRAY_DUMP) console.log("TRAY", todayErr || "", JSON.stringify(trayMenu().items.map((i) => (i.type === "checkbox" ? (i.checked ? "[x] " : "[ ] ") : "") + (i.label || "---"))));
+}
+const short = (s, n = 34) => (String(s).length > n ? String(s).slice(0, n - 1) + "…" : String(s));
+async function tickUpload(u) {
+  const day = today.day;
+  const body = u.per > 1 ? { track_id: u.id, day, n: u.done ? 0 : u.n + 1 } : { track_id: u.id, day, on: !u.done };
+  try { await api("/tracker/tick", { method: "POST", body }); } catch (e) { notifyTray("Could not tick " + u.channel, e.message); }
+  await loadToday();
+  win?.webContents.executeJavaScript("window.dispatchEvent(new Event('na-external-change'))").catch(() => {});
+}
+async function tickTask(t) {
+  try { await api(`/todos/${t.id}`, { method: "PUT", body: { status: t.done ? "To do" : "Done" } }); } catch (e) { notifyTray("Could not update the task", e.message); }
+  await loadToday();
+  win?.webContents.executeJavaScript("window.dispatchEvent(new Event('na-external-change'))").catch(() => {});
+}
+function notifyTray(title, body) { try { const { Notification } = require("electron"); new Notification({ title, body }).show(); } catch {} }
+function trayMenu() {
+  const items = [];
+  const dayLabel = today ? new Date(today.day + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : "Today";
+  if (todayErr && !today) items.push({ label: todayErr, enabled: false });
+  if (today) {
+    const ups = today.uploads || [];
+    const left = ups.filter((u) => !u.done).length;
+    items.push({ label: `Uploads · ${dayLabel}${ups.length ? ` · ${ups.length - left}/${ups.length} done` : ""}`, enabled: false });
+    if (!ups.length) items.push({ label: "   Nothing due today", enabled: false });
+    for (const u of ups) {
+      const kind = /short/i.test(u.type) ? "Shorts" : "Long";
+      const label = `${short(u.channel)}  ·  ${kind}${u.per > 1 ? `  ·  ${u.done ? u.per : u.n}/${u.per}` : ""}`;
+      items.push({ label, type: "checkbox", checked: !!u.done, enabled: today.can_tick !== false, click: () => tickUpload(u) });
+    }
+    items.push({ type: "separator" });
+    const ts = today.tasks || [];
+    items.push({ label: `Tasks for today${ts.length ? ` · ${ts.filter((t) => t.done).length}/${ts.length} done` : ""}`, enabled: false });
+    if (!ts.length) items.push({ label: "   No tasks due today", enabled: false });
+    for (const t of ts) items.push({ label: `${short(t.title, 40)}${t.late && !t.done ? "  ·  overdue" : ""}`, type: "checkbox", checked: !!t.done, click: () => tickTask(t) });
+    if (todayErr) items.push({ label: todayErr, enabled: false });
+  }
+  items.push({ type: "separator" },
+    { label: "Refresh", click: () => loadToday() },
+    { label: "Open NextAlerts", click: showWindow },
+    { label: "Check for updates…", click: () => { showWindow(); checkAndTell(); } },
+    { label: "Open when the computer starts", type: "checkbox", checked: autostartOn(), click: (item) => setAutostart(item.checked) },
+    { type: "separator" },
+    { label: "Quit NextAlerts", click: () => { quitting = true; app.quit(); } });
+  return Menu.buildFromTemplate(items);
+}
+function paintTray() {
+  if (!tray) return;
+  tray.setContextMenu(trayMenu());
+  const left = today ? (today.uploads || []).filter((u) => !u.done).length + (today.tasks || []).filter((t) => !t.done).length : 0;
+  tray.setToolTip(left ? `NextAlerts · ${left} left for today` : "NextAlerts");
+  if (process.platform === "darwin") tray.setTitle(left ? ` ${left}` : "");
+}
+function startTray() {
+  const img = process.platform === "darwin"
+    ? (() => { const i = nativeImage.createFromPath(path.join(__dirname, "trayTemplate.png")); i.setTemplateImage(true); return i; })()
+    : nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 16, height: 16 });
+  tray = new Tray(img);
+  tray.setToolTip("NextAlerts");
+  paintTray();
+  // Windows: left click opens the window, right click shows the menu (fresh). Mac: any click shows the menu.
+  if (process.platform === "win32") {
+    tray.on("click", showWindow);
+    tray.on("double-click", showWindow);
+    tray.on("right-click", () => { if (Date.now() - todayAt > 20000) loadToday(); });
+  } else {
+    tray.on("mouse-enter", () => { if (Date.now() - todayAt > 20000) loadToday(); });
+    tray.on("click", () => { if (Date.now() - todayAt > 20000) loadToday(); });
+  }
+  setTimeout(loadToday, 8000);
+  setInterval(loadToday, 10 * 60000);
+}
+// Open a YouTube / Studio page in a given Chrome profile (Chrome's own --profile-directory switch). Lets the dashboard
+// open Studio in profiles that do not have the Browser Hub extension. Only youtube.com addresses, only a profile
+// folder name — nothing else from the page reaches the command line.
+function chromePath() {
+  const c = process.platform === "win32"
+    ? [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean).map((d) => path.join(d, "Google", "Chrome", "Application", "chrome.exe"))
+    : ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", path.join(app.getPath("home"), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome")];
+  return c.find((f) => { try { return fs.existsSync(f); } catch { return false; } }) || "";
+}
+ipcMain.handle("app:open-chrome", (e, dir, url) => {
+  dir = String(dir || ""); url = String(url || "");
+  if (!/^(Default|Profile \d{1,4}|Guest Profile|System Profile|[\w .@-]{1,60})$/.test(dir) || /\.\./.test(dir)) return { ok: false, error: "bad profile" };
+  if (!/^https:\/\/(studio\.youtube\.com|www\.youtube\.com|youtube\.com|m\.youtube\.com)(\/|$)/.test(url)) return { ok: false, error: "only YouTube addresses" };
+  const exe = chromePath();
+  if (!exe) return { ok: false, error: "Google Chrome not found" };
+  try {
+    spawn(exe, [`--profile-directory=${dir}`, url], { detached: true, stdio: "ignore" }).unref();
+    return { ok: true };
+  } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
 ipcMain.handle("app:check-update", () => checkUpdate());
 ipcMain.handle("app:install-update", async () => { try { return await installUpdate(); } catch (err) { return { ok: false, message: String(err.message || err) }; } });
 ipcMain.handle("app:retry", () => { win?.loadURL(APP_URL); });
@@ -280,19 +388,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!st.openAtLogin && !readState().noAutostart) app.setLoginItemSettings({ openAtLogin: true, args: ["--autostart"] });
     }
     buildMenu();
-    if (process.platform === "win32" && !SMOKE) {
-      tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "icon.png")).resize({ width: 16, height: 16 }));
-      tray.setToolTip("NextAlerts");
-      tray.setContextMenu(Menu.buildFromTemplate([
-        { label: "Open NextAlerts", click: showWindow },
-        { label: "Check for updates…", click: () => { showWindow(); checkAndTell(); } },
-        { label: "Open when the computer starts", type: "checkbox", checked: autostartOn(), click: (item) => setAutostart(item.checked) },
-        { type: "separator" },
-        { label: "Quit", click: () => { quitting = true; app.quit(); } },
-      ]));
-      tray.on("click", showWindow);
-      tray.on("double-click", showWindow);
-    }
+    if (!SMOKE) startTray();
     createWindow();
     app.on("activate", () => showWindow());
   });

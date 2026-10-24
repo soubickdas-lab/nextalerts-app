@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("nextalertsApp", {
   installUpdate: () => ipcRenderer.invoke("app:install-update"),
   retry: () => ipcRenderer.invoke("app:retry"),
   focus: () => ipcRenderer.invoke("app:focus"),
+  openInChrome: (dir, url) => ipcRenderer.invoke("app:open-chrome", String(dir || ""), String(url || "")),
   setBadge: (n, image) => ipcRenderer.invoke("app:badge", Number(n) || 0, typeof image === "string" ? image.slice(0, 20000) : ""),
 });

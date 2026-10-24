@@ -47,6 +47,20 @@ save(mark(1024), f'{ROOT}/desktop/icon-1024.png')
 save(mark(512), f'{ROOT}/desktop/icon.png')
 mark(256).save(f'{ROOT}/desktop/icon.ico', sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
+# Mac menu bar: a template image — black on transparent, macOS tints it for light/dark menu bars
+def tray_template(px):
+    big = px * 8
+    im = Image.new('RGBA', (big, big), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    u = big / 100; sw = 11 * u
+    x0, x1, top, bot = 18 * u, 62 * u, 20 * u, 80 * u
+    pts = [(x0, bot), (x0, top), (x1, bot), (x1, top)]
+    d.line(pts, fill=(0, 0, 0, 255), width=int(sw), joint='curve')
+    for (x, y) in pts: d.ellipse([x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2], fill=(0, 0, 0, 255))
+    r = 10 * u; d.ellipse([80 * u - r, 20 * u - r, 80 * u + r, 20 * u + r], fill=(0, 0, 0, 255))
+    return im.resize((px, px), Image.LANCZOS)
+save(tray_template(18), f'{ROOT}/desktop/trayTemplate.png')
+save(tray_template(36), f'{ROOT}/desktop/trayTemplate@2x.png')
+
 # Android launcher icons (legacy square-ish + round) and the adaptive foreground
 for name, px in {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}.items():
     save(mark(px, radius=0.24, pad=0.04), f'{ROOT}/android/app/src/main/res/mipmap-{name}/ic_launcher.png')

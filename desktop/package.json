@@ -23,7 +23,9 @@
       "offline.html",
       "icon.ico",
       "icon.png",
-      "icon-1024.png"
+      "icon-1024.png",
+      "trayTemplate.png",
+      "trayTemplate@2x.png"
     ],
     "win": {
       "icon": "icon.ico",
