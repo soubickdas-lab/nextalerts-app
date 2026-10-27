@@ -12,7 +12,14 @@ const REPO = "soubickdas-lab/nextalerts-app";
 const SMOKE = process.argv.includes("--smoke-test"); // CI: load the site, print what happened, quit
 
 let win = null, tray = null, quitting = false, toldTray = false;
-const showWindow = () => { if (!win) return createWindow(); if (win.isMinimized()) win.restore(); win.show(); win.focus(); };
+// coming back to a window that sat hidden for a while: load the newest dashboard first (website updates show at once)
+let hiddenAt = 0;
+const showWindow = () => {
+  if (!win) return createWindow();
+  if (hiddenAt && Date.now() - hiddenAt > 10 * 60000 && isOurs(win.webContents.getURL())) win.webContents.reload();
+  hiddenAt = 0;
+  if (win.isMinimized()) win.restore(); win.show(); win.focus();
+};
 
 // ------------------------------------------------------------ window state
 const stateFile = () => path.join(app.getPath("userData"), "window.json");
@@ -69,6 +76,7 @@ function createWindow() {
     if (quitting || SMOKE) return;
     e.preventDefault();
     win.hide();
+    hiddenAt = Date.now();
     if (process.platform === "win32" && !toldTray) { toldTray = true; tray?.displayBalloon?.({ title: "NextAlerts is still running", content: "It stays here so notifications reach you. Right-click the icon to quit." }); }
   });
   win.on("closed", () => { win = null; });
